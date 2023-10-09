@@ -21,8 +21,8 @@ class MaTsEnvironment(ParallelEnv):
         plt.ion()
 
     def reset(self):
-        self.agent_positions = np.random.uniform(0, 1, size=(self._num_agents, 2))
-        self.target_positions = np.random.uniform(0, 1, size=(self.num_targets, 2))
+        self.agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))  # Avoid spawning near the boundary
+        self.target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))  # Avoid spawning near the boundary
         self.visited_targets.fill(False)
         return self.agent_positions
 
@@ -51,8 +51,10 @@ class MaTsEnvironment(ParallelEnv):
             # Update agent's position
             self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1)
 
+            # coliding with boundary of the environment
             if np.any(self.agent_positions[i] == 0) or np.any(self.agent_positions[i] == 1):
                 rewards[i] -= 1
+                # done = True
 
             # Check if agent has reached a target
             for j in range(self.num_targets):
@@ -62,26 +64,32 @@ class MaTsEnvironment(ParallelEnv):
                 if distance_new < 0.1:
                     if not self.visited_targets[j]:
                         # Agent reached a target that has not been visited before
-                        rewards[i] += 1
+                        rewards[i] += 20
                         self.visited_targets[j] = True
                     else:
                         # Agent reached a target that has already been visited
-                        # print("visiting target again...")
                         rewards[i] -= 0.5
-                elif distance_old > distance_new:
-                    # Agent is getting closer to a target
-                    rewards[i] += 0.1
+
+            # Only consider unvisited targets
+            if not np.all(self.visited_targets):
+                closest_target_index = np.argmin(np.linalg.norm(self.target_positions[~self.visited_targets] - self.agent_positions[i], axis=1))
+                closest_target_position = self.target_positions[~self.visited_targets][closest_target_index]
+                distance_old = np.linalg.norm(old_position - closest_target_position)
+                distance_new = np.linalg.norm(self.agent_positions[i] - closest_target_position)
+                if distance_old > distance_new:
+                    # Agent is getting closer to the closest unvisited target
+                    rewards[i] += 0.2
                 elif distance_old < distance_new:
-                    # Agent is getting further from a target
+                    # Agent is getting further from the closest unvisited target
                     rewards[i] -= 0.5
 
             # Check for collisions with other agents
             for j in range(i+1, self._num_agents):
                 if np.linalg.norm(self.agent_positions[i] - self.agent_positions[j]) < 0.1:
                     # Agents i and j have collided
-                    # print("agents have colided!")
                     rewards[i] -= 1
                     rewards[j] -= 1
+                    # done = True
 
         done = all(self.visited_targets)
         infos = {f'agent{i}': {} for i in range(self._num_agents)}
