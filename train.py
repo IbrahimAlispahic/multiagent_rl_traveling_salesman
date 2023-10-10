@@ -9,6 +9,7 @@ import numpy as np
 import random
 import traceback
 
+from replay_buffer import ReplayBuffer
 
 env = MaTsEnvironment(_num_agents=2, num_targets=6)
 env.reset()
@@ -21,9 +22,9 @@ input_dim = 2 * env._num_agents + 2 * env.num_targets + env.num_targets + env._n
 # loaded_network = torch.load('policy_networks_1a_1t_03.pth')['agent0']
 # combined_network = CombinedNetwork(loaded_network, loaded_network)
 
-# policy_networks = {f'agent{i}': PolicyNetwork(input_dim, 4) for i in range(env._num_agents)}
+policy_networks = {f'agent{i}': PolicyNetwork(input_dim, 4) for i in range(env._num_agents)}
 # policy_networks = {f'agent{i}': combined_network for i in range(env._num_agents)}
-policy_networks = torch.load('policy_networks_2a_6t_01_50k.pth')
+# policy_networks = torch.load('policy_networks_2a_6t_02_50k.pth')
 
 learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
@@ -38,6 +39,8 @@ epsilon_start = 1.0
 epsilon_end = 0.01
 epsilon_decay = 0.995
 epsilon = epsilon_start
+
+batch_size = 64
 
 try:
     for episode in range(num_episodes):
@@ -58,6 +61,8 @@ try:
 
         # Episode loop
         done = False
+        # replay_buffer = ReplayBuffer(10000)  # Adjust capacity as needed
+
         while not done:
             actions = {}
             # pozicije agenta (2 * 2 = 4), akcije za agente (2), pozicije ciljeva(2 * 5 = 10), posjecenost ciljeva (5) => 4+10+5+2 = 21
@@ -89,6 +94,7 @@ try:
                 rewards[f'agent{i}'].append(reward[i])
                 # rewards[f'agent{i}'].append(joint_reward)
 
+            # replay_buffer.push(state, actions, rewards, next_state, done)
             # Update the state with the new states and actions
             state = np.concatenate((next_state.flatten(), np.array(list(actions.values())), env.target_positions.flatten(), env.visited_targets.astype(float)))
 
@@ -117,6 +123,24 @@ try:
             optimizers[f'agent{i}'].zero_grad()
             policy_loss.backward()
             optimizers[f'agent{i}'].step()
+
+        # Update the policy networks
+        # for i in range(env._num_agents):
+        #     gamma = 0.8  # Discount factor
+        #     if len(replay_buffer) > batch_size:
+        #         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
+        #         for batch_index in range(batch_size):
+        #             G = 0
+        #             policy_loss = []
+        #             agent_rewards = rewards[batch_index][f'agent{i}']
+        #             for t in range(len(agent_rewards)):
+        #                 G = sum([gamma**i * r for i, r in enumerate(agent_rewards[t:])])
+        #                 policy_loss.append(-log_probs[f'agent{i}'][t] * G)
+        #             policy_loss = torch.stack(policy_loss).sum()
+
+        #             optimizers[f'agent{i}'].zero_grad()
+        #             policy_loss.backward(retain_graph=True)
+        #             optimizers[f'agent{i}'].step()
 
         # Log the metrics to TensorBoard
         writer.add_scalar('Total Reward', total_reward, episode)

@@ -8,7 +8,7 @@ num_targets= 6
 
 # Load the saved policy networks
 # policy_networks = torch.load(f'policy_networks_{num_agents}a_{num_targets}t_04_20k.pth')
-policy_networks = torch.load(f'policy_networks_2a_6t_01_50k.pth')
+policy_networks = torch.load(f'policy_networks.pth')
 
 # Create a new environment
 env = MaTsEnvironment(_num_agents=num_agents, num_targets=num_targets)
