@@ -11,6 +11,8 @@ import traceback
 
 from replay_buffer import ReplayBuffer
 
+torch.autograd.set_detect_anomaly(True)
+
 env = MaTsEnvironment(_num_agents=2, num_targets=6)
 env.reset()
 
@@ -22,12 +24,12 @@ input_dim = 2 * env._num_agents + 2 * env.num_targets + env.num_targets + env._n
 # loaded_network = torch.load('policy_networks_1a_1t_03.pth')['agent0']
 # combined_network = CombinedNetwork(loaded_network, loaded_network)
 
-policy_networks = {f'agent{i}': PolicyNetwork(input_dim, 4) for i in range(env._num_agents)}
+policy_network = PolicyNetwork(input_dim, 4)
 # policy_networks = {f'agent{i}': combined_network for i in range(env._num_agents)}
 # policy_networks = torch.load('policy_networks_2a_6t_02_50k.pth')
 
 learning_rate = 0.001  # You can experiment with this value
-optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
+optimizer = optim.Adam(policy_network.parameters(), lr=learning_rate)
 
 # Training loop
 num_episodes = 50_000
@@ -51,7 +53,7 @@ try:
         state = np.concatenate((env.reset().flatten(), np.zeros(env._num_agents), env.target_positions.flatten(), env.visited_targets.astype(float)))
 
         # Initialize lists to store states, actions, and rewards for each agent
-        log_probs = {f'agent{i}': [] for i in range(env._num_agents)}
+        log_probs = []
         rewards = {f'agent{i}': [] for i in range(env._num_agents)}
 
         # Initialize variables to store the total reward and episode length
@@ -61,7 +63,7 @@ try:
 
         # Episode loop
         done = False
-        # replay_buffer = ReplayBuffer(10000)  # Adjust capacity as needed
+        replay_buffer = ReplayBuffer(10000)  # Adjust capacity as needed
 
         while not done:
             actions = {}
@@ -69,12 +71,12 @@ try:
             state_tensor = torch.tensor(state)
             for i in range(env._num_agents):
                 # Select an action for each agent based on its policy
-                action_probs = policy_networks[f'agent{i}'](state_tensor)
+                action_probs = policy_network(state_tensor)
                 action_dist = torch.distributions.Categorical(action_probs)
                 action = action_dist.sample()
 
                 # Save the log probability of the selected action
-                log_probs[f'agent{i}'].append(action_dist.log_prob(action))
+                log_probs.append(action_dist.log_prob(action).detach())
 
                 if random.random() < epsilon:  # With probability epsilon, choose a random action
                     actions[f'agent{i}'] = random.choice(range(4))
@@ -94,7 +96,7 @@ try:
                 rewards[f'agent{i}'].append(reward[i])
                 # rewards[f'agent{i}'].append(joint_reward)
 
-            # replay_buffer.push(state, actions, rewards, next_state, done)
+            replay_buffer.push(state, actions, rewards, next_state, done)
             # Update the state with the new states and actions
             state = np.concatenate((next_state.flatten(), np.array(list(actions.values())), env.target_positions.flatten(), env.visited_targets.astype(float)))
 
@@ -110,37 +112,36 @@ try:
         # Decay epsilon
         epsilon = max(epsilon_end, epsilon_decay * epsilon)
         
-        # Update the policy networks
-        for i in range(env._num_agents):
-            policy_loss = []
-            G = 0
-            gamma = 0.8  # Discount factor
-            for t in range(len(rewards[f'agent{i}'])):
-                G = sum([gamma**i * r for i, r in enumerate(rewards[f'agent{i}'][t:])])
-                policy_loss.append(-log_probs[f'agent{i}'][t] * G)
-            policy_loss = torch.stack(policy_loss).sum()
-
-            optimizers[f'agent{i}'].zero_grad()
-            policy_loss.backward()
-            optimizers[f'agent{i}'].step()
-
-        # Update the policy networks
+        # policy_loss = torch.tensor(0.0)
+        # # Update the policy networks
+        # gamma = 0.8  # Discount factor
         # for i in range(env._num_agents):
-        #     gamma = 0.8  # Discount factor
-        #     if len(replay_buffer) > batch_size:
-        #         states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
-        #         for batch_index in range(batch_size):
-        #             G = 0
-        #             policy_loss = []
-        #             agent_rewards = rewards[batch_index][f'agent{i}']
-        #             for t in range(len(agent_rewards)):
-        #                 G = sum([gamma**i * r for i, r in enumerate(agent_rewards[t:])])
-        #                 policy_loss.append(-log_probs[f'agent{i}'][t] * G)
-        #             policy_loss = torch.stack(policy_loss).sum()
+        #     G = 0
+        #     for t in range(len(rewards[f'agent{i}'])):
+        #         G = sum([gamma**i * r for i, r in enumerate(rewards[f'agent{i}'][t:])])
+        #         policy_loss += -log_probs[t] * G
 
-        #             optimizers[f'agent{i}'].zero_grad()
-        #             policy_loss.backward(retain_graph=True)
-        #             optimizers[f'agent{i}'].step()
+        # optimizer.zero_grad()
+        # policy_loss.backward()
+        # optimizer.step()
+
+        policy_loss = torch.tensor(0.0, requires_grad=True)
+        # Update the policy networks
+        gamma = 0.8  # Discount factor
+        for i in range(env._num_agents):
+            if len(replay_buffer) > batch_size:
+                states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
+                for batch_index in range(batch_size):
+                    G = 0
+                    agent_rewards = rewards[batch_index][f'agent{i}']
+                    for t in range(len(agent_rewards)):
+                        G = sum([gamma**i * r for i, r in enumerate(agent_rewards[t:])])
+                        policy_loss = policy_loss + (-log_probs[t] * G)
+
+
+        optimizer.zero_grad()
+        policy_loss.backward(retain_graph=True)
+        optimizer.step()
 
         # Log the metrics to TensorBoard
         writer.add_scalar('Total Reward', total_reward, episode)
@@ -155,9 +156,9 @@ except Exception as e:
     traceback.print_exc()
     print("Training interrupted, saving weights...")
     writer.close()
-    torch.save(policy_networks, 'policy_networks_interrupted.pth')
+    torch.save(policy_network, 'policy_networks_interrupted.pth')
     print("Weights saved to 'policy_networks_interrupted.pth'")
 
 # Close the SummaryWriter
 writer.close()
-torch.save(policy_networks, 'policy_networks.pth')
+torch.save(policy_network, 'policy_networks.pth')
