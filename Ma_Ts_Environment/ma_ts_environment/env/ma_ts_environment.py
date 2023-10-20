@@ -27,7 +27,10 @@ class MaTsEnvironment(ParallelEnv):
         self.target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))  # Avoid spawning near the boundary
         self.visited_targets.fill(False)
         self.target_claims.fill(-1)
-        return self.agent_positions
+        return np.hstack((self.agent_positions.flatten(),
+                          self.target_positions.flatten(),
+                          self.visited_targets.astype(float),
+                          np.zeros(self._num_agents)))
 
     def _calculate_movement(self, action):
         if action == 0:   # move up
@@ -142,7 +145,11 @@ class MaTsEnvironment(ParallelEnv):
 
         done = all(self.visited_targets)
         infos = {f'agent{i}': {} for i in range(self._num_agents)}
-        return self.agent_positions, rewards, done, infos
+        next_state = np.hstack((self.agent_positions.flatten(),
+                                self.target_positions.flatten(),
+                                self.visited_targets.astype(float),
+                                np.array(list(actions.values()))))
+        return next_state, rewards, done, infos
 
 
     def render(self):

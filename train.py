@@ -48,7 +48,7 @@ try:
         if episode % 100 == 0:
             print("EPISODE ", episode)
         # Reset the environment and get the initial state
-        state = np.concatenate((env.reset().flatten(), np.zeros(env._num_agents), env.target_positions.flatten(), env.visited_targets.astype(float)))
+        state = env.reset()
 
         # Initialize lists to store states, actions, and rewards for each agent
         log_probs = {f'agent{i}': [] for i in range(env._num_agents)}
@@ -96,7 +96,7 @@ try:
 
             # replay_buffer.push(state, actions, rewards, next_state, done)
             # Update the state with the new states and actions
-            state = np.concatenate((next_state.flatten(), np.array(list(actions.values())), env.target_positions.flatten(), env.visited_targets.astype(float)))
+            state = next_state
 
             # Update the total reward and episode length
             # total_reward += joint_reward
