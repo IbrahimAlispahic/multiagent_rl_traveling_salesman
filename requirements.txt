@@ -5,3 +5,4 @@ SuperSuit>=3.9.0
 stable-baselines3
 gym
 TensorBoard>=2.4.1
+scipy

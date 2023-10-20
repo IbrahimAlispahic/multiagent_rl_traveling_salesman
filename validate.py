@@ -3,8 +3,8 @@ from Ma_Ts_Environment.ma_ts_environment.env.ma_ts_environment import MaTsEnviro
 import numpy as np
 
 
-num_agents = 2
-num_targets= 6
+num_agents = 1
+num_targets= 1
 
 # Load the saved policy networks
 # policy_networks = torch.load(f'policy_networks_{num_agents}a_{num_targets}t_04_20k.pth')
@@ -25,7 +25,7 @@ def select_actions(state, policy_networks):
     return actions
 
 # Run the environment for a few episodes and render each episode
-num_episodes = 30
+num_episodes = 50
 for episode in range(num_episodes):
     print(f"EPISODE {episode}")
     state = np.concatenate((env.reset().flatten(), np.zeros(env._num_agents), env.target_positions.flatten(), env.visited_targets.astype(float)))

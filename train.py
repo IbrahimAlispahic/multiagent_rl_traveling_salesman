@@ -11,7 +11,7 @@ import traceback
 
 from replay_buffer import ReplayBuffer
 
-env = MaTsEnvironment(_num_agents=2, num_targets=6)
+env = MaTsEnvironment(_num_agents=1, num_targets=1)
 env.reset()
 
 # Initialize a SummaryWriter
@@ -19,12 +19,12 @@ writer = SummaryWriter()
 
 # Initialize the policy networks for each agent
 input_dim = 2 * env._num_agents + 2 * env.num_targets + env.num_targets + env._num_agents
-# loaded_network = torch.load('policy_networks_1a_1t_03.pth')['agent0']
+# loaded_network = torch.load('policy_networks.pth')['agent0']
 # combined_network = CombinedNetwork(loaded_network, loaded_network)
 
 policy_networks = {f'agent{i}': PolicyNetwork(input_dim, 4) for i in range(env._num_agents)}
 # policy_networks = {f'agent{i}': combined_network for i in range(env._num_agents)}
-# policy_networks = torch.load('policy_networks_2a_6t_02_50k.pth')
+# policy_networks = torch.load('policy_networks.pth')
 
 learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}

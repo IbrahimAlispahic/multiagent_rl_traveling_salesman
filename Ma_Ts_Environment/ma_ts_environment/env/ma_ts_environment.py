@@ -2,6 +2,7 @@ from pettingzoo.utils import ParallelEnv
 from gym.spaces import Box, Discrete
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.special
 
 class MaTsEnvironment(ParallelEnv):
     def __init__(self, _num_agents, num_targets):
@@ -28,21 +29,78 @@ class MaTsEnvironment(ParallelEnv):
         self.target_claims.fill(-1)
         return self.agent_positions
 
+    def _calculate_movement(self, action):
+        if action == 0:   # move up
+            return np.array([0, 0.1])
+        elif action == 1: # move down
+            return np.array([0, -0.1])
+        elif action == 2: # move left
+            return np.array([-0.1, 0])
+        elif action == 3: # move right
+            return np.array([0.1, 0])
+        
+    def _calculate_reward_for_boundary_collision(self, agent_position):
+        if np.any(agent_position == 0) or np.any(agent_position == 1):
+            return -1
+        return 0
+    
+    def _calculate_reward_for_target_reach(self, agent_position, target_positions, visited_targets):
+        reward = 0
+        for j in range(self.num_targets):
+            distance = np.linalg.norm(agent_position - target_positions[j])
+            if distance < 0.1:
+                if not visited_targets[j]:
+                    reward += 20
+                    visited_targets[j] = True
+                else:
+                    reward -= 0.5
+        return reward, visited_targets
+    
+    def _calculate_directional_reward(self, old_position, new_position, closest_target_position, use_simple_reward):
+        # Calculate the distance to the target
+        distance_old = np.linalg.norm(old_position - closest_target_position)
+        distance_new = np.linalg.norm(new_position - closest_target_position)
+
+        if use_simple_reward:
+            return 0.2 if distance_old > distance_new else -0.5
+        else:
+            # Calculate the reward based on distance (exponential function)
+            reward_distance = np.exp(-distance_new) - np.exp(-distance_old)
+
+            # Calculate the reward based on direction
+            # Compute the direction of movement
+            direction_of_movement = np.arctan2(new_position[1] - old_position[1], new_position[0] - old_position[0])
+            # Compute the direction towards the target
+            direction_to_target = np.arctan2(closest_target_position[1] - old_position[1], closest_target_position[0] - old_position[0])
+            # Compute the difference between the two directions
+            delta_direction = np.abs(direction_of_movement - direction_to_target)
+            # Compute the reward for moving in the correct direction
+            # using log function
+            # reward_direction = -np.log(delta_direction + 1)
+            # using sigmoid function
+            reward_direction = scipy.special.expit(-delta_direction)
+
+            # Add a constant reward if getting closer to the target
+            reward_closer = 0.2 if distance_old > distance_new else 0
+
+            # Combine the rewards
+            reward = reward_distance + reward_direction + reward_closer
+            
+            # Add Gaussian noise to the reward
+            # reward += np.random.normal(0, 0.1)
+
+            return reward
+
     def step(self, actions):
         rewards = np.zeros(self._num_agents)
+        use_simple_reward = True  # Set this to True to use the simple reward approach
+        
         for i in range(self._num_agents):
             # Get action for the agent
             action = actions[f'agent{i}']
 
             # Determine movement based on action
-            if action == 0:   # move up
-                movement = np.array([0, 0.1])
-            elif action == 1: # move down
-                movement = np.array([0, -0.1])
-            elif action == 2: # move left
-                movement = np.array([-0.1, 0])
-            elif action == 3: # move right
-                movement = np.array([0.1, 0])
+            movement = self._calculate_movement(action)
 
             # Add a small negative reward for each step
             rewards[i] -= 0.01
@@ -51,50 +109,29 @@ class MaTsEnvironment(ParallelEnv):
             old_position = self.agent_positions[i].copy()
 
             # Update agent's position
+
             self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1)
 
-            # Colliding with boundary of the environment
-            if np.any(self.agent_positions[i] == 0) or np.any(self.agent_positions[i] == 1):
-                rewards[i] -= 1
+            # Calculate the reward for boundary collision
+            rewards[i] += self._calculate_reward_for_boundary_collision(self.agent_positions[i])
 
-            # Check if agent has reached a target
-            for j in range(self.num_targets):
-                distance_old = np.linalg.norm(old_position - self.target_positions[j])
-                distance_new = np.linalg.norm(self.agent_positions[i] - self.target_positions[j])
+            # Calculate the reward for reaching a target
+            reward_target, self.visited_targets = self._calculate_reward_for_target_reach(self.agent_positions[i], self.target_positions, self.visited_targets)
+            rewards[i] += reward_target
 
-                if distance_new < 0.1:
-                    if not self.visited_targets[j]:
-                        # Agent reached a target that has not been visited before
-                        rewards[i] += 20
-                        self.visited_targets[j] = True
-                        self.target_claims[j] = -1  # Reset the claim as the target is now visited
-                    else:
-                        # Agent reached a target that has already been visited
-                        rewards[i] -= 0.5
-            
-            closest_target_position = None
-            # Only consider unvisited targets
+            # Calculate the reward for moving towards the closest unvisited target
             if not np.all(self.visited_targets):
                 unvisited_target_indices = np.where(~self.visited_targets)[0]
                 distances_to_unvisited_targets = np.linalg.norm(self.target_positions[unvisited_target_indices] - self.agent_positions[i], axis=1)
                 sorted_indices = np.argsort(distances_to_unvisited_targets)
-                
+                closest_target_position = None
                 for target_index in sorted_indices:
                     if self.target_claims[unvisited_target_indices[target_index]] == -1 or self.target_claims[unvisited_target_indices[target_index]] == i:
                         closest_target_position = self.target_positions[unvisited_target_indices[target_index]]
                         self.target_claims[unvisited_target_indices[target_index]] = i
                         break
-
-            # Calculate the reward based on whether the agent is getting closer to or further from the closest unvisited target
-            if closest_target_position is not None:
-                distance_old = np.linalg.norm(old_position - closest_target_position)
-                distance_new = np.linalg.norm(self.agent_positions[i] - closest_target_position)
-                if distance_old > distance_new:
-                    # Agent is getting closer to the closest unvisited target
-                    rewards[i] += 0.2
-                elif distance_old < distance_new:
-                    # Agent is getting further from the closest unvisited target
-                    rewards[i] -= 0.5
+                if closest_target_position is not None:
+                    rewards[i] += self._calculate_directional_reward(old_position, self.agent_positions[i], closest_target_position, use_simple_reward)
 
             # Check for collisions with other agents
             for j in range(i+1, self._num_agents):

@@ -7,6 +7,8 @@ class PolicyNetwork(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(input_dim, 64),
             nn.ReLU(),
+            # nn.Linear(64, 64),
+            # nn.ReLU(),
             nn.Linear(64, output_dim),
             nn.Softmax(dim=-1)
         )
