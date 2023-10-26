@@ -5,17 +5,23 @@ import numpy as np
 import scipy.special
 
 class MaTsEnvironment(ParallelEnv):
-    def __init__(self, _num_agents, num_targets):
+    def __init__(self, _num_agents, num_targets, num_actions=4, fixed_episodes=10):
         
+        self.episode_count = 0
+        self.fixed_episodes = fixed_episodes
+        self.fixed_agent_positions = None
+        self.fixed_target_positions = None
+
         self._num_agents = _num_agents
         self.num_targets = num_targets
         self.agent_positions = np.zeros((_num_agents, 2))
+        self.velocities = np.zeros((_num_agents, 2))
         self.target_positions = np.zeros((num_targets, 2))
         self.visited_targets = np.zeros(num_targets, dtype=bool)
         self.target_claims = np.zeros(num_targets, dtype=int)
 
         self.observation_spaces = {f'agent{i}': Box(low=0, high=1, shape=(2,)) for i in range(_num_agents)}
-        self.action_spaces = {f'agent{i}': Discrete(4) for i in range(_num_agents)}
+        self.action_spaces = {f'agent{i}': Discrete(num_actions) for i in range(_num_agents)}
 
         self.fig, self.ax = plt.subplots(figsize=(5, 5))  # Initialize the figure and axes
         self.agent_scatter = self.ax.scatter([], [], color='blue', s=500)  # Initialize the scatter object for agents
@@ -23,24 +29,39 @@ class MaTsEnvironment(ParallelEnv):
         plt.ion()
 
     def reset(self):
-        self.agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))  # Avoid spawning near the boundary
-        self.target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))  # Avoid spawning near the boundary
+        # self.episode_count += 1
+        # if self.episode_count % self.fixed_episodes == 1:
+        self.fixed_agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2)) # Avoid spawning near the boundary
+        self.fixed_target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2)) # Avoid spawning near the boundary
+
+        self.agent_positions = self.fixed_agent_positions.copy()
+        self.previous_agent_positions = self.agent_positions.copy()
+        self.velocities =  self.agent_positions - self.previous_agent_positions
+        self.target_positions = self.fixed_target_positions.copy()
         self.visited_targets.fill(False)
         self.target_claims.fill(-1)
+        # distances_to_other_agents = self.get_distances_to_other_agents()
+        distances_to_targets = np.zeros((self._num_agents, self.num_targets))
         return np.hstack((self.agent_positions.flatten(),
+                          self.velocities.flatten(),
                           self.target_positions.flatten(),
+                        #   distances_to_other_agents,
+                          distances_to_targets.flatten(),
                           self.visited_targets.astype(float),
                           np.zeros(self._num_agents)))
 
     def _calculate_movement(self, action):
+        step_size = 0.1
         if action == 0:   # move up
-            return np.array([0, 0.1])
+            return np.array([0, step_size])
         elif action == 1: # move down
-            return np.array([0, -0.1])
+            return np.array([0, -step_size])
         elif action == 2: # move left
-            return np.array([-0.1, 0])
+            return np.array([-step_size, 0])
         elif action == 3: # move right
-            return np.array([0.1, 0])
+            return np.array([step_size, 0])
+        elif action == 4: # stay in place
+            return np.array([0, 0])
         
     def _calculate_reward_for_boundary_collision(self, agent_position):
         if np.any(agent_position == 0) or np.any(agent_position == 1):
@@ -58,6 +79,17 @@ class MaTsEnvironment(ParallelEnv):
                 else:
                     reward -= 0.5
         return reward, visited_targets
+    
+    def _calculate_penalty_for_visited_target(self, old_position, new_position):
+        if np.any(self.visited_targets):
+            visited_target_indices = np.where(self.visited_targets)[0]
+            distances_to_visited_targets = np.linalg.norm(self.target_positions[visited_target_indices] - new_position, axis=1)
+            closest_visited_target_index = np.argmin(distances_to_visited_targets)
+            distance_old = np.linalg.norm(old_position - self.target_positions[visited_target_indices][closest_visited_target_index])
+            distance_new = distances_to_visited_targets[closest_visited_target_index]
+            return 0.5 if distance_old > distance_new else 0
+        else:
+            return 0
     
     def _calculate_directional_reward(self, old_position, new_position, closest_target_position, use_simple_reward):
         # Calculate the distance to the target
@@ -94,6 +126,29 @@ class MaTsEnvironment(ParallelEnv):
 
             return reward
 
+    def _calculate_distances(self):
+        distances = np.zeros((self._num_agents, self.num_targets))
+        for i in range(self._num_agents):
+            for j in range(self.num_targets):
+                distances[i, j] = np.linalg.norm(self.agent_positions[i] - self.target_positions[j])
+        return distances
+    
+    def get_distances_to_other_agents(self):
+        # Expand dimensions for broadcasting
+        agent_positions_expanded = np.expand_dims(self.agent_positions, axis=0)
+        agent_positions_transposed = np.transpose(agent_positions_expanded, axes=(1, 0, 2))
+
+        # Calculate distances
+        distances = np.linalg.norm(agent_positions_expanded - agent_positions_transposed, axis=2)
+
+        # Set diagonal to large number to avoid selecting self in later steps
+        np.fill_diagonal(distances, 0)
+        n = distances.shape[0]
+
+        upper_triangular_indices = np.triu_indices(n, k=1)
+        upper_triangular_elements = distances[upper_triangular_indices]
+        return upper_triangular_elements
+
     def step(self, actions):
         rewards = np.zeros(self._num_agents)
         use_simple_reward = True  # Set this to True to use the simple reward approach
@@ -106,14 +161,16 @@ class MaTsEnvironment(ParallelEnv):
             movement = self._calculate_movement(action)
 
             # Add a small negative reward for each step
-            rewards[i] -= 0.01
+            rewards[i] -= 0.05
 
             # Save old position
-            old_position = self.agent_positions[i].copy()
+            self.previous_agent_positions[i] = self.agent_positions[i].copy()
 
             # Update agent's position
-
             self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1)
+
+            # Calculate velocity
+            self.velocities[i] = self.agent_positions[i] - self.previous_agent_positions[i]
 
             # Calculate the reward for boundary collision
             rewards[i] += self._calculate_reward_for_boundary_collision(self.agent_positions[i])
@@ -134,7 +191,13 @@ class MaTsEnvironment(ParallelEnv):
                         self.target_claims[unvisited_target_indices[target_index]] = i
                         break
                 if closest_target_position is not None:
-                    rewards[i] += self._calculate_directional_reward(old_position, self.agent_positions[i], closest_target_position, use_simple_reward)
+                    rewards[i] += self._calculate_directional_reward(self.previous_agent_positions[i],
+                                                                     self.agent_positions[i], 
+                                                                     closest_target_position, 
+                                                                     use_simple_reward)
+
+            penalty = self._calculate_penalty_for_visited_target(self.previous_agent_positions[i], self.agent_positions[i])
+            rewards[i] -= penalty
 
             # Check for collisions with other agents
             for j in range(i+1, self._num_agents):
@@ -145,8 +208,13 @@ class MaTsEnvironment(ParallelEnv):
 
         done = all(self.visited_targets)
         infos = {f'agent{i}': {} for i in range(self._num_agents)}
+        distances_to_targets = self._calculate_distances()
+        # distances_to_other_agents = self.get_distances_to_other_agents()
         next_state = np.hstack((self.agent_positions.flatten(),
+                                self.velocities.flatten(),
                                 self.target_positions.flatten(),
+                                # distances_to_other_agents,
+                                distances_to_targets.flatten(),
                                 self.visited_targets.astype(float),
                                 np.array(list(actions.values()))))
         return next_state, rewards, done, infos

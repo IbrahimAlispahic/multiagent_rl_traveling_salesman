@@ -11,18 +11,30 @@ import traceback
 
 from replay_buffer import ReplayBuffer
 
-env = MaTsEnvironment(_num_agents=1, num_targets=1)
+num_actions = 4
+env = MaTsEnvironment(_num_agents=2, num_targets=6, num_actions=num_actions)
 env.reset()
 
 # Initialize a SummaryWriter
 writer = SummaryWriter()
 
 # Initialize the policy networks for each agent
-input_dim = 2 * env._num_agents + 2 * env.num_targets + env.num_targets + env._num_agents
+# agents positions (2 * _num_agents), 
+# agents velocities (2 * _num_agents),
+# targets positions (2 * num_targets), 
+# distances from other agents _num_agents * (_num_agents - 1) / 2 NOT USING 
+# distances from targets (_num_agents * num_targets), 
+# visited state of targets (num_targets),
+# agent actions (_num_agents)
+agent_positions = 2 * env._num_agents
+agent_velocities = 2 * env._num_agents
+target_positions = 2 * env.num_targets
+# dist_from_agents = env._num_agents * (env._num_agents - 1) / 2
+dist_from_targets = env._num_agents * env.num_targets
+input_dim = agent_positions + agent_velocities + target_positions + dist_from_targets + env.num_targets + env._num_agents
 # loaded_network = torch.load('policy_networks.pth')['agent0']
 # combined_network = CombinedNetwork(loaded_network, loaded_network)
-
-policy_networks = {f'agent{i}': PolicyNetwork(input_dim, 4) for i in range(env._num_agents)}
+policy_networks = {f'agent{i}': PolicyNetwork(int(input_dim), num_actions) for i in range(env._num_agents)}
 # policy_networks = {f'agent{i}': combined_network for i in range(env._num_agents)}
 # policy_networks = torch.load('policy_networks.pth')
 
@@ -30,14 +42,14 @@ learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
 
 # Training loop
-num_episodes = 50_000
+num_episodes = 100_000
 # average_reward_threshold = 10  # You can experiment with this value
 stop_training = False
 
 # Initialize epsilon for epsilon-greedy exploration
 epsilon_start = 1.0
-epsilon_end = 0.01
-epsilon_decay = 0.995
+epsilon_end = 0.05
+epsilon_decay = 0.9975
 epsilon = epsilon_start
 
 batch_size = 64
@@ -57,7 +69,7 @@ try:
         # Initialize variables to store the total reward and episode length
         total_reward = 0
         episode_length = 0
-        max_episode_length = 1000
+        max_episode_length = 200
 
         # Episode loop
         done = False
@@ -65,7 +77,6 @@ try:
 
         while not done:
             actions = {}
-            # pozicije agenta (2 * 2 = 4), akcije za agente (2), pozicije ciljeva(2 * 5 = 10), posjecenost ciljeva (5) => 4+10+5+2 = 21
             state_tensor = torch.tensor(state)
             for i in range(env._num_agents):
                 # Select an action for each agent based on its policy
@@ -77,7 +88,7 @@ try:
                 log_probs[f'agent{i}'].append(action_dist.log_prob(action))
 
                 if random.random() < epsilon:  # With probability epsilon, choose a random action
-                    actions[f'agent{i}'] = random.choice(range(4))
+                    actions[f'agent{i}'] = random.choice(range(num_actions))
                 else:  # Otherwise, choose the action that the agent thinks is the best
                     # Add the action to the action dictionary
                     actions[f'agent{i}'] = action.item()
@@ -110,6 +121,33 @@ try:
         # Decay epsilon
         epsilon = max(epsilon_end, epsilon_decay * epsilon)
         
+        # # During the policy update - PPO
+        # for i in range(env._num_agents):
+        #     policy_loss = []
+        #     G = 0
+        #     gamma = 0.7  # Discount factor
+        #     for t in range(len(rewards[f'agent{i}'])):
+        #         G = sum([gamma**i * r for i, r in enumerate(rewards[f'agent{i}'][t:])])
+
+        #         # Re-compute the log probability of the action under the updated policy
+        #         action_probs = policy_networks[f'agent{i}'](state_tensor)
+        #         action_dist = torch.distributions.Categorical(action_probs)
+        #         action = action_dist.sample()
+        #         new_log_prob = action_dist.log_prob(action)
+        #         log_probs[f'agent{i}'].append(new_log_prob)
+
+        #         ratio = torch.exp(log_probs[f'agent{i}'][t] - old_log_probs[f'agent{i}'][t])
+        #         clip_adv = torch.clamp(ratio, 1 - 0.2, 1 + 0.2) * G
+        #         policy_loss.append(-torch.min(ratio * G, clip_adv))
+        #     policy_loss = torch.stack(policy_loss).sum()
+
+        #     optimizers[f'agent{i}'].zero_grad()
+        #     policy_loss.backward()
+        #     optimizers[f'agent{i}'].step()
+        #     old_log_probs[f'agent{i}'] = []  # Reset the old log probabilities for the next episode
+        #     log_probs[f'agent{i}'] = []  # Reset the log probabilities for the next episode
+
+        
         # Update the policy networks
         for i in range(env._num_agents):
             policy_loss = []
@@ -122,6 +160,7 @@ try:
 
             optimizers[f'agent{i}'].zero_grad()
             policy_loss.backward()
+            # torch.nn.utils.clip_grad_norm_(policy_networks[f'agent{i}'].parameters(), max_norm=1.0)
             optimizers[f'agent{i}'].step()
 
         # Update the policy networks
