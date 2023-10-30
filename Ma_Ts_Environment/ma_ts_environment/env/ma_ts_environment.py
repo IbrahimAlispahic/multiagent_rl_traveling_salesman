@@ -155,7 +155,7 @@ class MaTsEnvironment(ParallelEnv):
         
         for i in range(self._num_agents):
             # Get action for the agent
-            action = actions[f'agent{i}']
+            action = actions[i]
 
             # Determine movement based on action
             movement = self._calculate_movement(action)
@@ -216,7 +216,7 @@ class MaTsEnvironment(ParallelEnv):
                                 # distances_to_other_agents,
                                 distances_to_targets.flatten(),
                                 self.visited_targets.astype(float),
-                                np.array(list(actions.values()))))
+                                actions))
         return next_state, rewards, done, infos
 
 

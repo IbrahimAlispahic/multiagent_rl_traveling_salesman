@@ -12,7 +12,7 @@ import traceback
 from replay_buffer import ReplayBuffer
 
 num_actions = 4
-env = MaTsEnvironment(_num_agents=2, num_targets=6, num_actions=num_actions)
+env = MaTsEnvironment(_num_agents=1, num_targets=1, num_actions=num_actions)
 env.reset()
 
 # Initialize a SummaryWriter
@@ -42,7 +42,7 @@ learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
 
 # Training loop
-num_episodes = 100_000
+num_episodes = 20_000
 # average_reward_threshold = 10  # You can experiment with this value
 stop_training = False
 
