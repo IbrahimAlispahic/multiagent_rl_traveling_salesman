@@ -3,24 +3,33 @@ from gym.spaces import Box, Discrete
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.special
+import scipy.stats
+from collections import deque
+import random
 
 class MaTsEnvironment(ParallelEnv):
-    def __init__(self, _num_agents, num_targets, num_actions=4, fixed_episodes=10):
+    def __init__(self, _num_agents, num_targets, num_actions=4, fixed_episodes=10, size=1):
         
         self.episode_count = 0
         self.fixed_episodes = fixed_episodes
         self.fixed_agent_positions = None
         self.fixed_target_positions = None
+        self.size = size
+
+        self.action_counts = np.zeros((_num_agents, num_actions))
+        self.action_buffers = [deque(maxlen=10) for _ in range(_num_agents)]  # Buffer for the last 10 actions for each agent
+
 
         self._num_agents = _num_agents
         self.num_targets = num_targets
+        self.num_actions = num_actions
         self.agent_positions = np.zeros((_num_agents, 2))
         self.velocities = np.zeros((_num_agents, 2))
         self.target_positions = np.zeros((num_targets, 2))
         self.visited_targets = np.zeros(num_targets, dtype=bool)
         self.target_claims = np.zeros(num_targets, dtype=int)
 
-        self.observation_spaces = {f'agent{i}': Box(low=0, high=1, shape=(2,)) for i in range(_num_agents)}
+        self.observation_spaces = {f'agent{i}': Box(low=0, high=1 * self.size, shape=(2,)) for i in range(_num_agents)}
         self.action_spaces = {f'agent{i}': Discrete(num_actions) for i in range(_num_agents)}
 
         self.fig, self.ax = plt.subplots(figsize=(5, 5))  # Initialize the figure and axes
@@ -31,8 +40,8 @@ class MaTsEnvironment(ParallelEnv):
     def reset(self):
         # self.episode_count += 1
         # if self.episode_count % self.fixed_episodes == 1:
-        self.fixed_agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2)) # Avoid spawning near the boundary
-        self.fixed_target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2)) # Avoid spawning near the boundary
+        self.fixed_agent_positions = np.random.uniform(0.1, self.size - 0.1, size=(self._num_agents, 2)) # Avoid spawning near the boundary
+        self.fixed_target_positions = np.random.uniform(0.1, self.size - 0.1, size=(self.num_targets, 2)) # Avoid spawning near the boundary
 
         self.agent_positions = self.fixed_agent_positions.copy()
         self.previous_agent_positions = self.agent_positions.copy()
@@ -51,7 +60,7 @@ class MaTsEnvironment(ParallelEnv):
                           np.zeros(self._num_agents)))
 
     def _calculate_movement(self, action):
-        step_size = 0.1
+        step_size = 0.1 * self.size
         if action == 0:   # move up
             return np.array([0, step_size])
         elif action == 1: # move down
@@ -64,7 +73,7 @@ class MaTsEnvironment(ParallelEnv):
             return np.array([0, 0])
         
     def _calculate_reward_for_boundary_collision(self, agent_position):
-        if np.any(agent_position == 0) or np.any(agent_position == 1):
+        if np.any(agent_position == 0) or np.any(agent_position == 1 * self.size):
             return -1
         return 0
     
@@ -148,14 +157,48 @@ class MaTsEnvironment(ParallelEnv):
         upper_triangular_indices = np.triu_indices(n, k=1)
         upper_triangular_elements = distances[upper_triangular_indices]
         return upper_triangular_elements
+    
+    @staticmethod
+    def detect_loop(buffer):
+        buffer_list = list(buffer)
+        buffer_length = len(buffer_list)
+        sequence_counts = {}
+        for seq_length in range(2, buffer_length // 2 + 1):
+            for start in range(buffer_length - seq_length * 2 + 1):
+                seq = tuple(buffer_list[start:start+seq_length])
+                sequence_counts[seq] = sequence_counts.get(seq, 0) + 1
+                if sequence_counts[seq] >= 5:
+                    return list(seq)
+        return None
+
 
     def step(self, actions):
+        actions = actions.astype(int)
         rewards = np.zeros(self._num_agents)
-        use_simple_reward = True  # Set this to True to use the simple reward approach
+        use_simple_reward = False  # Set this to True to use the simple reward approach
         
         for i in range(self._num_agents):
             # Get action for the agent
             action = actions[i]
+
+            # # Add the action to the buffer
+            # self.action_buffers[i].append(action)
+            # # Check for loops
+            # loop = self.detect_loop(self.action_buffers[i])
+            # if loop is not None:
+            #     # If a loop is detected, select a random action that is different from the next action in the loop
+            #     action = random.choice([a for a in range(self.num_actions)])
+            #     print("Loop detected, selecting a random action... ", action)
+
+            # # Entropy reward
+            # self.action_counts[i][action] += 1
+            # # Normalize the action counts to get a distribution
+            # action_distribution = self.action_counts[i] / np.sum(self.action_counts[i])
+            # # Calculate the entropy
+            # entropy = scipy.stats.entropy(action_distribution)
+            # # Add the entropy to the reward
+            # rewards[i] += 0.1 * entropy  # Adjust the coefficient as needed
+
 
             # Determine movement based on action
             movement = self._calculate_movement(action)
@@ -167,7 +210,7 @@ class MaTsEnvironment(ParallelEnv):
             self.previous_agent_positions[i] = self.agent_positions[i].copy()
 
             # Update agent's position
-            self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1)
+            self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1 * self.size)
 
             # Calculate velocity
             self.velocities[i] = self.agent_positions[i] - self.previous_agent_positions[i]
@@ -227,8 +270,8 @@ class MaTsEnvironment(ParallelEnv):
         self.target_scatter.set_offsets(self.target_positions)
         self.target_scatter.set_color(target_colors)
 
-        plt.xlim(0, 1)
-        plt.ylim(0, 1)
+        plt.xlim(0, 1 * self.size)
+        plt.ylim(0, 1 * self.size)
         plt.pause(0.05)
         self.fig.canvas.draw()  # Update the figure
         # plt.grid()

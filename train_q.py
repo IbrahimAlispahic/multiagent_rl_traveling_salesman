@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from replay_buffer import ReplayBuffer
 
 num_actions = 4
-env = MaTsEnvironment(_num_agents=2, num_targets=6, num_actions=num_actions)
+env = MaTsEnvironment(_num_agents=1, num_targets=6, num_actions=num_actions)
 env.reset()
 
 # Initialize a SummaryWriter
@@ -32,8 +32,15 @@ target_positions = 2 * env.num_targets
 # dist_from_agents = env._num_agents * (env._num_agents - 1) / 2
 dist_from_targets = env._num_agents * env.num_targets
 input_dim = agent_positions + agent_velocities + target_positions + dist_from_targets + env.num_targets + env._num_agents
-# loaded_network = torch.load('q_networks.pth')['agent0']
+# q_networks = torch.load('policy_networks_1a_10t_02_100k.pth')
 q_networks = {f'agent{i}': QNetwork(int(input_dim), num_actions) for i in range(env._num_agents)}
+
+# Initialize the target networks for each agent
+target_networks = {f'agent{i}': QNetwork(int(input_dim), num_actions) for i in range(env._num_agents)}
+
+# Copy the initial weights from the Q-networks to the target networks
+for i in range(env._num_agents):
+    target_networks[f'agent{i}'].load_state_dict(q_networks[f'agent{i}'].state_dict())
 
 learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(q_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
@@ -43,6 +50,7 @@ num_episodes = 10_000
 # average_reward_threshold = 10  # You can experiment with this value
 stop_training = False
 
+target_update = 1000
 # Initialize epsilon for epsilon-greedy exploration
 epsilon_start = 1.0
 epsilon_end = 0.05
@@ -54,6 +62,20 @@ gamma = 0.9  # Discount factor
 batch_size = 64
 # Initialize the ReplayBuffer
 replay_buffer = ReplayBuffer(200000)  # Adjust capacity as needed
+
+
+def ucb(q_values, N, t, c=2):
+    # q_values: action-value estimates
+    # N: number of times each action has been taken
+    # t: current time step
+    # c: exploration parameter
+    # Add a small constant to prevent division by zero
+    return q_values + c * np.sqrt(np.log(t) / (N + 1e-9))
+
+
+def learning_rate_schedule(episode, initial_lr=0.5, min_lr=0.01, decay_rate=0.99):
+    return max(min_lr, initial_lr * decay_rate**episode)
+
 
 try:
     for episode in range(num_episodes):
@@ -73,19 +95,27 @@ try:
 
         # Episode loop
         done = False
+        # # Initialize N to zeros
+        # N = np.zeros((env._num_agents, num_actions))
+        # lr = learning_rate_schedule(episode)
 
         while not done:
             actions = np.zeros(env._num_agents)
             state_tensor = torch.tensor(state)
             for i in range(env._num_agents):
+                # for param_group in optimizers[f'agent{i}'].param_groups:
+                #     param_group['lr'] = lr
                 # Select an action for each agent based on its policy
                 q_values = q_networks[f'agent{i}'](state_tensor)
 
                 if random.random() < epsilon:  # With probability epsilon, choose a random action
-                    actions[i] = random.choice(range(num_actions))
+                    action = random.choice(range(num_actions))
                 else:  # Otherwise, choose the action that the agent thinks is the best
                     # Add the action to the action dictionary
-                    actions[i] = torch.argmax(q_values).item()
+                    action = torch.argmax(q_values).item()
+                    # action = np.argmax(ucb(q_values.detach().numpy(), N[i], episode+1)).item()
+                actions[i] = action
+                # N[i][action] += 1
             
             # Take a step in the environment
             next_state, reward, done, _ = env.step(actions)
@@ -106,7 +136,10 @@ try:
                     reward_i = reward_batch[:, i]
                     # Compute the Q-values for the current and next states
                     q_values = q_networks[f'agent{i}'](state_batch)
-                    next_q_values = q_networks[f'agent{i}'](next_state_batch)
+                    # next_q_values = q_networks[f'agent{i}'](next_state_batch)
+
+                     # Compute the target Q-values using the target network
+                    next_q_values = target_networks[f'agent{i}'](next_state_batch)
 
                     # Compute the target Q-values
                     max_next_q_values, _ = torch.max(next_q_values, dim=1)
@@ -134,6 +167,11 @@ try:
             #     break
             episode_length += 1
 
+        # Update the target network every N episodes
+        if episode % target_update == 0:
+            for i in range(env._num_agents):
+                target_networks[f'agent{i}'].load_state_dict(q_networks[f'agent{i}'].state_dict())
+        
         # Decay epsilon
         epsilon = max(epsilon_end, epsilon_decay * epsilon)
 
