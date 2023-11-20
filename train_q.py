@@ -18,7 +18,8 @@ env.reset()
 # Initialize a SummaryWriter
 writer = SummaryWriter()
 
-# Initialize the policy networks for each agent
+# Initialize the networks for each agent
+
 # agents positions (2 * _num_agents), 
 # agents velocities (2 * _num_agents),
 # targets positions (2 * num_targets), 
