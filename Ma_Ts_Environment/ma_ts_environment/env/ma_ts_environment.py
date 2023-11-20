@@ -17,7 +17,7 @@ class MaTsEnvironment(ParallelEnv):
         self.size = size
 
         self.action_counts = np.zeros((_num_agents, num_actions))
-        self.action_buffers = [deque(maxlen=10) for _ in range(_num_agents)]  # Buffer for the last 10 actions for each agent
+        self.action_buffers = [deque(maxlen=20) for _ in range(_num_agents)]  # Buffer for the last 10 actions for each agent
 
 
         self._num_agents = _num_agents
@@ -60,7 +60,7 @@ class MaTsEnvironment(ParallelEnv):
                           np.zeros(self._num_agents)))
 
     def _calculate_movement(self, action):
-        step_size = 0.1 * self.size
+        step_size = 0.1 # * self.size
         if action == 0:   # move up
             return np.array([0, step_size])
         elif action == 1: # move down
@@ -157,18 +157,27 @@ class MaTsEnvironment(ParallelEnv):
         upper_triangular_indices = np.triu_indices(n, k=1)
         upper_triangular_elements = distances[upper_triangular_indices]
         return upper_triangular_elements
+
     
-    @staticmethod
-    def detect_loop(buffer):
+    def detect_loop(self, buffer, agent_position):
         buffer_list = list(buffer)
         buffer_length = len(buffer_list)
         sequence_counts = {}
-        for seq_length in range(2, buffer_length // 2 + 1):
+        for seq_length in range(2, 5):  # We're looking for sequences of 2, 3 or 4 actions
             for start in range(buffer_length - seq_length * 2 + 1):
                 seq = tuple(buffer_list[start:start+seq_length])
-                sequence_counts[seq] = sequence_counts.get(seq, 0) + 1
-                if sequence_counts[seq] >= 5:
-                    return list(seq)
+                # print("seq: ", seq)
+                if len(set(seq)) > 1:  # Check if not all actions in the sequence are the same
+                    sequence_counts[seq] = sequence_counts.get(seq, 0) + 1
+                    if sequence_counts[seq] >= 5:  # Detect a sequence repeating 5 times
+                        return list(seq)
+                else:
+                    if agent_position[0] == 0 and seq[0] == 2 or \
+                       agent_position[1] == 0 and seq[0] == 1 or \
+                       agent_position[0] == 1 and seq[0] == 3 or \
+                       agent_position[1] == 1 and seq[0] == 0:
+                        return list(seq)
+
         return None
 
 
@@ -182,13 +191,18 @@ class MaTsEnvironment(ParallelEnv):
             action = actions[i]
 
             # # Add the action to the buffer
-            # self.action_buffers[i].append(action)
-            # # Check for loops
-            # loop = self.detect_loop(self.action_buffers[i])
-            # if loop is not None:
-            #     # If a loop is detected, select a random action that is different from the next action in the loop
-            #     action = random.choice([a for a in range(self.num_actions)])
-            #     print("Loop detected, selecting a random action... ", action)
+            self.action_buffers[i].append(action)
+            # Check for loops
+            loop = self.detect_loop(self.action_buffers[i], self.agent_positions[i])
+            if loop is not None:
+                # print("loop: ", loop)
+                # If a loop is detected, select a random action that is different from the next action in the loop
+                action = random.choice([a for a in range(self.num_actions) if a != loop[0]])
+                rewards[i] -= 1
+                # print("action: ", action)
+                # print(loop)
+                # print(self.action_buffers[i])
+                # print("Loop detected, selecting a random action... ", action)
 
             # # Entropy reward
             # self.action_counts[i][action] += 1

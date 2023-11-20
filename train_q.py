@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from replay_buffer import ReplayBuffer
 
 num_actions = 4
-env = MaTsEnvironment(_num_agents=1, num_targets=6, num_actions=num_actions)
+env = MaTsEnvironment(_num_agents=2, num_targets=10, num_actions=num_actions, size=1)
 env.reset()
 
 # Initialize a SummaryWriter
@@ -32,7 +32,7 @@ target_positions = 2 * env.num_targets
 # dist_from_agents = env._num_agents * (env._num_agents - 1) / 2
 dist_from_targets = env._num_agents * env.num_targets
 input_dim = agent_positions + agent_velocities + target_positions + dist_from_targets + env.num_targets + env._num_agents
-# q_networks = torch.load('policy_networks_1a_10t_02_100k.pth')
+# q_networks = torch.load('q_networks_3a_10t_01_20k.pth')
 q_networks = {f'agent{i}': QNetwork(int(input_dim), num_actions) for i in range(env._num_agents)}
 
 # Initialize the target networks for each agent
@@ -46,7 +46,7 @@ learning_rate = 0.001  # You can experiment with this value
 optimizers = {f'agent{i}': optim.Adam(q_networks[f'agent{i}'].parameters(), lr=learning_rate) for i in range(env._num_agents)}
 
 # Training loop
-num_episodes = 10_000
+num_episodes = 100_000
 # average_reward_threshold = 10  # You can experiment with this value
 stop_training = False
 
@@ -57,7 +57,9 @@ epsilon_end = 0.05
 epsilon_decay = 0.9975
 epsilon = epsilon_start
 
-gamma = 0.9  # Discount factor
+gamma = 0.8  # Discount factor
+
+tau = 0.01  # Soft update rate
 
 batch_size = 64
 # Initialize the ReplayBuffer
@@ -80,7 +82,7 @@ def learning_rate_schedule(episode, initial_lr=0.5, min_lr=0.01, decay_rate=0.99
 try:
     for episode in range(num_episodes):
 
-        if episode % 100 == 0:
+        if episode % 200 == 0:
             print("EPISODE ", episode)
         # Reset the environment and get the initial state
         state = env.reset()
@@ -91,7 +93,7 @@ try:
         # Initialize variables to store the total reward and episode length
         total_reward = 0
         episode_length = 0
-        max_episode_length = 400
+        max_episode_length = 800
 
         # Episode loop
         done = False
@@ -125,6 +127,7 @@ try:
             replay_buffer.push(state, actions, reward, next_state, done)
 
             if episode_length >= max_episode_length:
+                print("MAX LENGTH EPISODE!")
                 done = True  # End the episode
 
             # Only update the network if the replay buffer contains enough samples
@@ -168,9 +171,15 @@ try:
             episode_length += 1
 
         # Update the target network every N episodes
-        if episode % target_update == 0:
-            for i in range(env._num_agents):
-                target_networks[f'agent{i}'].load_state_dict(q_networks[f'agent{i}'].state_dict())
+        # # Hard update
+        # if episode % target_update == 0:
+        #     for i in range(env._num_agents):
+        #         target_networks[f'agent{i}'].load_state_dict(q_networks[f'agent{i}'].state_dict())
+
+        # Soft update
+        for i in range(env._num_agents):
+            for target_param, local_param in zip(target_networks[f'agent{i}'].parameters(), q_networks[f'agent{i}'].parameters()):
+                target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
         
         # Decay epsilon
         epsilon = max(epsilon_end, epsilon_decay * epsilon)
