@@ -58,7 +58,6 @@ policy_optimizers = {f'agent{i}': optim.Adam(policy_networks[f'agent{i}'].parame
 num_episodes = 5000
 stop_training = False
 
-target_update = 1000
 policy_update = 2
 
 # Initialize action_noise and noise_clip
@@ -137,7 +136,7 @@ try:
                     # Update the Q-networks
                     for optimizer, loss in zip(optimizers[f'agent{i}'], losses):
                         optimizer.zero_grad()
-                        loss.backward()
+                        loss.backward(retain_graph=True)
                         optimizer.step()
 
                     # Soft update the target networks
