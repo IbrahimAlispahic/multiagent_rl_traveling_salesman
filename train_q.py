@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from replay_buffer import ReplayBuffer
 
-num_actions = 9
+num_actions = 4
 env = MaTsEnvironment(_num_agents=1, num_targets=10, num_actions=num_actions)
 env.reset()
 
@@ -56,7 +56,7 @@ for i in range(env._num_agents):
 
 learning_rate = 0.001
 optimizers = {
-    f"agent{i}": optim.Adam(q_networks[f"agent{i}"].parameters(), lr=learning_rate)
+    f"agent{i}": optim.Adam(q_networks[f"agent{i}"].parameters(), lr=learning_rate,  weight_decay=0.01)
     for i in range(env._num_agents)
 }
 
@@ -72,7 +72,7 @@ epsilon_end = 0.05
 epsilon_decay = 0.9975
 epsilon = epsilon_start
 
-gamma = 0.8  # Discount factor
+gamma = 0.9  # Discount factor
 
 tau = 0.01  # Soft update rate
 

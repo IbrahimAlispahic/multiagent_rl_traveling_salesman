@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import random
+from torch.nn.functional import softmax
 
 # from torch.utils.tensorboard import SummaryWriter
 
@@ -8,16 +9,27 @@ from Ma_Ts_Environment.ma_ts_environment.env.ma_ts_environment import MaTsEnviro
 
 num_agents = 1
 num_targets = 10
-num_actions = 9
+num_actions = 4
 
 # Load the saved q networks
-q_networks = torch.load("q_networks.pth")
+q_networks = torch.load("q_networks_1a_10t_02_10k.pth")
 # writer = SummaryWriter()
 
 # Create a new environment
 env = MaTsEnvironment(
     _num_agents=num_agents, num_targets=num_targets, num_actions=num_actions
 )
+
+
+def softmax_select_actions(state, q_networks, temperature=1.0):
+    actions = np.zeros(env._num_agents)
+    for i in range(env._num_agents):
+        state_tensor = torch.tensor(state)
+        q_values = q_networks[f"agent{i}"](state_tensor)
+        probabilities = softmax(q_values / temperature, dim=0).detach().numpy()
+        action = np.random.choice(range(num_actions), p=probabilities)
+        actions[i] = action
+    return actions
 
 
 # Define a function to select actions based on the policy networks
@@ -41,18 +53,20 @@ for episode in range(num_episodes):
     state = env.reset()
     done = False
     ep_length = 0
+
     while not done:
         ep_length += 1
         if ep_length > 400:
             print("OVER 400 episode!")
-            print(actions)
+            # print(actions)
             # break
-            env.render()
-        actions = select_actions(state, q_networks)
+            # env.render()
+        actions = softmax_select_actions(state, q_networks)
+        # actions = select_actions(state, q_networks)
         next_state, rewards, done, _ = env.step(actions)
         # print("REWARDS: ", rewards)
         # print("ACTIONS: ", actions)
         state = next_state
 
         # env.render()
-    # writer.add_scalar('Episode Length', ep_length, episode)
+    # writer.add_scalar("Episode Length", ep_length, episode)

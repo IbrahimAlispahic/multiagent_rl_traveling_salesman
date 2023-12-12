@@ -77,7 +77,7 @@ class MaTsEnvironment(ParallelEnv):
         )
 
     def _calculate_movement(self, action):
-        step_size = 0.1
+        step_size = 0.01
         if action == 0:  # move up
             return np.array([0, step_size])
         elif action == 1:  # move down
