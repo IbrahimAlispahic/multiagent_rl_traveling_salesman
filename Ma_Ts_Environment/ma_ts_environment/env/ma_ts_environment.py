@@ -8,7 +8,7 @@ from collections import deque
 import random
 
 
-class MaTsEnvironment(ParallelEnv):
+class MaTsEnvironment:
     def __init__(self, _num_agents, num_targets, num_actions=4):
         self.fixed_agent_positions = None
         self.fixed_target_positions = None
@@ -29,13 +29,6 @@ class MaTsEnvironment(ParallelEnv):
         self.target_claims = np.zeros(num_targets, dtype=int)
 
         self.visited_locations = np.zeros((100, 100))  # Adjust the size as needed
-
-        self.observation_spaces = {
-            f"agent{i}": Box(low=0, high=1, shape=(2,)) for i in range(_num_agents)
-        }
-        self.action_spaces = {
-            f"agent{i}": Discrete(num_actions) for i in range(_num_agents)
-        }
 
         self.fig, self.ax = plt.subplots(
             figsize=(5, 5)
@@ -77,7 +70,7 @@ class MaTsEnvironment(ParallelEnv):
         )
 
     def _calculate_movement(self, action):
-        step_size = 0.01
+        step_size = 0.1
         if action == 0:  # move up
             return np.array([0, step_size])
         elif action == 1:  # move down
