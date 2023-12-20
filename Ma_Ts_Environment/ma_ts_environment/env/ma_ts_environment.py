@@ -18,6 +18,12 @@ class MaTsEnvironment:
         self._num_agents = _num_agents
         self.num_targets = num_targets
         self.num_actions = num_actions
+
+        self.fixed_agent_positions = None
+        self.fixed_target_positions = None
+        self.randomize_agents = False
+        self.randomize_targets = False
+
         self.agent_positions = np.zeros((_num_agents, 2))
         self.previous_agent_positions = np.zeros((_num_agents, 2))
         self.velocities = np.zeros((_num_agents, 2))
@@ -36,18 +42,36 @@ class MaTsEnvironment:
         )  # Initialize the scatter object for targets
         plt.ion()
 
-    def reset(self):
-        self.fixed_agent_positions = np.random.uniform(
-            0.1, 0.9, size=(self._num_agents, 2)
-        )  # Avoid spawning near the boundary
-        self.fixed_target_positions = np.random.uniform(
-            0.1, 0.9, size=(self.num_targets, 2)
-        )  # Avoid spawning near the boundary
 
-        self.agent_positions = self.fixed_agent_positions.copy()
+    def set_fixed_positions(self, agent_positions, target_positions):
+        self.fixed_agent_positions = agent_positions
+        self.fixed_target_positions = target_positions
+        self.randomize_agents = False
+        self.randomize_targets = False
+
+
+    def set_random_agent_positions(self):
+        self.randomize_agents = True
+
+
+    def set_fully_random_positions(self):
+        self.randomize_agents = True
+        self.randomize_targets = True
+
+
+    def reset(self):
+        if self.fixed_agent_positions is not None and not self.randomize_agents:
+            self.agent_positions = self.fixed_agent_positions.copy()
+        else:
+            self.agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))
+
+        if self.fixed_target_positions is not None and not self.randomize_targets:
+            self.target_positions = self.fixed_target_positions.copy()
+        else:
+            self.target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))
+
         self.previous_agent_positions = self.agent_positions.copy()
         self.velocities = self.agent_positions - self.previous_agent_positions
-        self.target_positions = self.fixed_target_positions.copy()
         self.visited_targets.fill(False)
         self.target_claims.fill(-1)
         # distances_to_other_agents = self.get_distances_to_other_agents()

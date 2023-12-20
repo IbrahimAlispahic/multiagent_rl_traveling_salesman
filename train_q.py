@@ -114,6 +114,25 @@ def update_network(
     optimizer.step()
 
 
+def get_current_phase(episode, phase_ranges):
+    """Determine the current phase based on the episode number."""
+    for i, (start, end) in enumerate(phase_ranges):
+        if start <= episode < end:
+            return i
+    return len(phase_ranges) - 1  # Last phase
+
+
+def generate_positions_set(num_agents, num_targets):
+    """Generate a set of positions for agents and targets."""
+    # Random positions for agents
+    agent_positions = np.random.uniform(0.1, 0.9, size=(num_agents, 2))
+
+    # Random positions for targets
+    target_positions = np.random.uniform(0.1, 0.9, size=(num_targets, 2))
+
+    return agent_positions, target_positions
+
+
 def main():
     """
     Main training loop.
@@ -159,12 +178,36 @@ def main():
     num_episodes = 50_000
     batch_size = 64
 
+    # Define phases and their episode ranges
+    phase_ranges = [(0, 1000), (1000, 20000), (20000, 50000)]
+    fixed_positions_sets = [generate_positions_set(num_agents, num_targets) for _ in range(10)]  # Generate 10 sets of fixed positions
+
     try:
         for episode in range(num_episodes):
+            state = env.reset()
+            # print('agent position: ', env.agent_positions)
+            # print('target position: ', env.target_positions)
+
+            # Check and update the phase based on the episode number
+            current_phase = get_current_phase(episode, phase_ranges)
+
+            if current_phase == 0:
+                # Phase 0: Fixed positions for 1000 episodes
+                agent_positions, target_positions = fixed_positions_sets[0]
+                env.set_fixed_positions(agent_positions, target_positions)
+            elif current_phase == 1:
+                # Phase 1: Different fixed positions for agents every 500 episodes
+                set_index = (episode - 1000) // 500
+                agent_positions, target_positions = fixed_positions_sets[set_index % len(fixed_positions_sets)]
+                env.set_fixed_positions(agent_positions, target_positions)
+            elif current_phase == 2:
+                # Phase 2: Randomize positions
+                env.set_fully_random_positions()
+
             if episode % 200 == 0:
                 print("EPISODE ", episode)
+                # print("current_phase ", current_phase)
 
-            state = env.reset()
             total_reward = 0
             episode_length = 0
             max_episode_length = 5000

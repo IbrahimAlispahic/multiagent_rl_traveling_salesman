@@ -47,6 +47,7 @@ def main():
     num_episodes = 5000
     for episode in range(num_episodes):
         print(f"EPISODE {episode}")
+        state = env.reset()
         done = False
         ep_length = 0
 
