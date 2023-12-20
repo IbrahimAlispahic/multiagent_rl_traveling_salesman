@@ -10,9 +10,6 @@ import random
 
 class MaTsEnvironment:
     def __init__(self, _num_agents, num_targets, num_actions=4):
-        self.fixed_agent_positions = None
-        self.fixed_target_positions = None
-
         self.action_counts = np.zeros((_num_agents, num_actions))
         self.action_buffers = [
             deque(maxlen=20) for _ in range(_num_agents)
@@ -27,8 +24,6 @@ class MaTsEnvironment:
         self.target_positions = np.zeros((num_targets, 2))
         self.visited_targets = np.zeros(num_targets, dtype=bool)
         self.target_claims = np.zeros(num_targets, dtype=int)
-
-        self.visited_locations = np.zeros((100, 100))  # Adjust the size as needed
 
         self.fig, self.ax = plt.subplots(
             figsize=(5, 5)
@@ -89,7 +84,6 @@ class MaTsEnvironment:
             return np.array([-step_size, -step_size])
         elif action == 8:  # move up and to the left (diagonal)
             return np.array([-step_size, step_size])
-
 
     def _calculate_penalty_for_boundary_collision(self, agent_position):
         if np.any(agent_position == 0) or np.any(agent_position == 1):
@@ -237,7 +231,7 @@ class MaTsEnvironment:
 
     def step(self, actions):
         actions = actions.astype(int)
-         # Add some noise to the actions
+        # Add some noise to the actions
         # noise = np.random.normal(0, 0.1, size=actions.shape)
         # actions = (actions + noise).clip(0, self.num_actions - 1).astype(int)
 
@@ -284,13 +278,6 @@ class MaTsEnvironment:
 
             # Update agent's position
             self.agent_positions[i] = np.clip(self.agent_positions[i] + movement, 0, 1)
-
-            # Update visited locations and calculate the penalty
-            x, y = (self.agent_positions[i] * (self.visited_locations.shape[0] - 1)).astype(int)  # Scale to grid size and subtract 1
-            if self.visited_locations[x, y] == 1:
-                rewards[i] -= 0.1  # Adjust the penalty as needed
-            else:
-                self.visited_locations[x, y] = 1
 
             # Calculate velocity
             self.velocities[i] = (

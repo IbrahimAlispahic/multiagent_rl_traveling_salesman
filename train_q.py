@@ -10,8 +10,7 @@ from torch import optim
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from Ma_Ts_Environment.ma_ts_environment.env.ma_ts_environment import MaTsEnvironment
-# from q_network import QNetwork
-from q_network1 import ModifiedQNetwork
+from q_network import QNetwork
 from replay_buffer import ReplayBuffer
 
 
@@ -20,10 +19,14 @@ def initialize_networks(input_dim, num_actions, num_agents):
     Initialize Q-networks and target networks.
     """
     q_networks = {
-        f"agent_{i}": ModifiedQNetwork(input_dim, num_actions) for i in range(num_agents)
+        f"agent_{i}": QNetwork(input_dim, num_actions) for i in range(num_agents)
     }
+    # Loading trained weights
+    # q_networks = torch.load('q_networks.pth')
+    # q_networks = {f"agent_{key[len('agent'):]}": value for key, value in q_networks.items()}
+    print(q_networks.keys())
     target_networks = {
-        f"agent_{i}": ModifiedQNetwork(input_dim, num_actions) for i in range(num_agents)
+        f"agent_{i}": QNetwork(input_dim, num_actions) for i in range(num_agents)
     }
     for i in range(num_agents):
         target_networks[f"agent_{i}"].load_state_dict(
@@ -115,9 +118,9 @@ def main():
     """
     Main training loop.
     """
-    num_agents = 1
-    num_targets = 1
-    num_actions = 4
+    num_agents = 4
+    num_targets = 20
+    num_actions = 9
 
     env = MaTsEnvironment(
         _num_agents=num_agents, num_targets=num_targets, num_actions=num_actions
@@ -153,7 +156,7 @@ def main():
     epsilon = epsilon_start
     gamma = 0.8
     tau = 0.01
-    num_episodes = 2_000
+    num_episodes = 50_000
     batch_size = 64
 
     try:
@@ -164,7 +167,7 @@ def main():
             state = env.reset()
             total_reward = 0
             episode_length = 0
-            max_episode_length = 400
+            max_episode_length = 5000
             done = False
 
             while not done:

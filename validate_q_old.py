@@ -3,17 +3,17 @@ import numpy as np
 import random
 from torch.nn.functional import softmax
 
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from Ma_Ts_Environment.ma_ts_environment.env.ma_ts_environment import MaTsEnvironment
 
-num_agents = 1
-num_targets = 10
-num_actions = 4
+num_agents = 4
+num_targets = 20
+num_actions = 9
 
 # Load the saved q networks
-q_networks = torch.load("q_networks_1a_10t_02_10k.pth")
-# writer = SummaryWriter()
+q_networks = torch.load("q_networks_4a_20t_02_100k.pth")
+writer = SummaryWriter()
 
 # Create a new environment
 env = MaTsEnvironment(
@@ -69,4 +69,4 @@ for episode in range(num_episodes):
         state = next_state
 
         # env.render()
-    # writer.add_scalar("Episode Length", ep_length, episode)
+    writer.add_scalar("Episode Length", ep_length, episode)

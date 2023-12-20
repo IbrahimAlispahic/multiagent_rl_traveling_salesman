@@ -34,9 +34,9 @@ def main():
     """
     Main validation loop.
     """
-    num_agents = 1
-    num_targets = 1
-    num_actions = 4
+    num_agents = 4
+    num_targets = 20
+    num_actions = 9
     env = MaTsEnvironment(
         _num_agents=num_agents, num_targets=num_targets, num_actions=num_actions
     )
@@ -47,7 +47,6 @@ def main():
     num_episodes = 5000
     for episode in range(num_episodes):
         print(f"EPISODE {episode}")
-        state = env.reset()
         done = False
         ep_length = 0
 
@@ -58,7 +57,7 @@ def main():
                 # env.render()
                 # break
 
-            actions = softmax_select_actions(state, q_networks, num_actions)
+            actions = softmax_select_actions(state, q_networks, num_actions, False)
             next_state, _rewards, done, _ = env.step(actions)
             state = next_state
             env.render()
