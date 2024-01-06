@@ -137,8 +137,8 @@ def main():
     """
     Main training loop.
     """
-    num_agents = 4
-    num_targets = 20
+    num_agents = 1
+    num_targets = 6
     num_actions = 9
 
     env = MaTsEnvironment(
@@ -175,38 +175,45 @@ def main():
     epsilon = epsilon_start
     gamma = 0.8
     tau = 0.01
-    num_episodes = 50_000
+    num_episodes = 5_000
     batch_size = 64
 
     # Define phases and their episode ranges
-    phase_ranges = [(0, 1000), (1000, 20000), (20000, 50000)]
-    fixed_positions_sets = [generate_positions_set(num_agents, num_targets) for _ in range(10)]  # Generate 10 sets of fixed positions
+    phase_ranges = [(0, 300), (300, 2500), (2500, num_episodes)]
+    set_change_interval = 100  # Interval for changing fixed positions
+    gradual_randomization_interval = 10  # Interval for randomizing one agent/target
 
     try:
         for episode in range(num_episodes):
             state = env.reset()
+            current_phase = get_current_phase(episode, phase_ranges)
+
+            # if current_phase == 0:
+            #     # Phase 0: Keep initial fixed positions throughout
+            #     if episode == 0:  # Only set at the beginning of the phase
+            #         env.set_new_positions()
+            if current_phase == 1:
+                # Phase 2: Gradual randomization
+                if episode % gradual_randomization_interval == 0:
+                    if env.num_randomized_targets < num_targets:
+                        env.randomize_one_target()
+                    elif env.num_randomized_agents < num_agents:
+                        env.randomize_one_agent()
+                    # if all agents and targets are randomized,
+                    # change fixed positions every set_change_interval episodes
+                    elif episode % set_change_interval == 0:
+                        env.set_new_positions()
+            elif current_phase == 2:
+                # Phase 3: Fully randomize positions every episode
+                env.set_new_positions()
+
+            # print("current_phase ", current_phase)
             # print('agent position: ', env.agent_positions)
             # print('target position: ', env.target_positions)
 
-            # Check and update the phase based on the episode number
-            current_phase = get_current_phase(episode, phase_ranges)
-
-            if current_phase == 0:
-                # Phase 0: Fixed positions for 1000 episodes
-                agent_positions, target_positions = fixed_positions_sets[0]
-                env.set_fixed_positions(agent_positions, target_positions)
-            elif current_phase == 1:
-                # Phase 1: Different fixed positions for agents every 500 episodes
-                set_index = (episode - 1000) // 500
-                agent_positions, target_positions = fixed_positions_sets[set_index % len(fixed_positions_sets)]
-                env.set_fixed_positions(agent_positions, target_positions)
-            elif current_phase == 2:
-                # Phase 2: Randomize positions
-                env.set_fully_random_positions()
-
             if episode % 200 == 0:
                 print("EPISODE ", episode)
-                # print("current_phase ", current_phase)
+                print("current_phase ", current_phase)
 
             total_reward = 0
             episode_length = 0

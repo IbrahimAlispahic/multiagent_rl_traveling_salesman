@@ -19,15 +19,19 @@ class MaTsEnvironment:
         self.num_targets = num_targets
         self.num_actions = num_actions
 
-        self.fixed_agent_positions = None
-        self.fixed_target_positions = None
+        self.fixed_agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))
+        self.fixed_target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))
         self.randomize_agents = False
         self.randomize_targets = False
 
-        self.agent_positions = np.zeros((_num_agents, 2))
-        self.previous_agent_positions = np.zeros((_num_agents, 2))
+        # Initialize counters for gradual randomization
+        self.num_randomized_agents = 0
+        self.num_randomized_targets = 0
+
+        self.agent_positions = None
+        self.previous_agent_positions = self.agent_positions
+        self.target_positions = None
         self.velocities = np.zeros((_num_agents, 2))
-        self.target_positions = np.zeros((num_targets, 2))
         self.visited_targets = np.zeros(num_targets, dtype=bool)
         self.target_claims = np.zeros(num_targets, dtype=int)
 
@@ -43,32 +47,33 @@ class MaTsEnvironment:
         plt.ion()
 
 
-    def set_fixed_positions(self, agent_positions, target_positions):
-        self.fixed_agent_positions = agent_positions
-        self.fixed_target_positions = target_positions
-        self.randomize_agents = False
-        self.randomize_targets = False
+    def set_new_positions(self):
+        """Randomize positions for all agents and targets"""
+        self.fixed_agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))
+        self.fixed_target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))
 
 
-    def set_random_agent_positions(self):
-        self.randomize_agents = True
+    def randomize_one_agent(self):
+        """Randomize the position of one more agent."""
+        if self.num_randomized_agents < self._num_agents:
+            self.fixed_agent_positions[self.num_randomized_agents] = np.random.uniform(
+                0.1, 0.9, size=(2,)
+            )
+            self.num_randomized_agents += 1
 
 
-    def set_fully_random_positions(self):
-        self.randomize_agents = True
-        self.randomize_targets = True
+    def randomize_one_target(self):
+        """Randomize the position of one more target."""
+        if self.num_randomized_targets < self.num_targets:
+            self.fixed_target_positions[self.num_randomized_targets] = np.random.uniform(
+                0.1, 0.9, size=(2,)
+            )
+            self.num_randomized_targets += 1
 
 
     def reset(self):
-        if self.fixed_agent_positions is not None and not self.randomize_agents:
-            self.agent_positions = self.fixed_agent_positions.copy()
-        else:
-            self.agent_positions = np.random.uniform(0.1, 0.9, size=(self._num_agents, 2))
-
-        if self.fixed_target_positions is not None and not self.randomize_targets:
-            self.target_positions = self.fixed_target_positions.copy()
-        else:
-            self.target_positions = np.random.uniform(0.1, 0.9, size=(self.num_targets, 2))
+        self.agent_positions = self.fixed_agent_positions.copy()
+        self.target_positions = self.fixed_target_positions.copy()
 
         self.previous_agent_positions = self.agent_positions.copy()
         self.velocities = self.agent_positions - self.previous_agent_positions
