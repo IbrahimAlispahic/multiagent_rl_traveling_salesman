@@ -22,7 +22,7 @@ def initialize_networks(input_dim, num_actions, num_agents):
         f"agent_{i}": QNetwork(input_dim, num_actions) for i in range(num_agents)
     }
     # Loading trained weights
-    # q_networks = torch.load('q_networks.pth')
+    # q_networks = torch.load('q_networks_4a_20t_02_100k.pth')
     # q_networks = {f"agent_{key[len('agent'):]}": value for key, value in q_networks.items()}
     print(q_networks.keys())
     target_networks = {
@@ -156,7 +156,7 @@ def main():
     epsilon = epsilon_start
     gamma = 0.8
     tau = 0.01
-    num_episodes = 50_000
+    num_episodes = 2_000
     batch_size = 64
 
     try:

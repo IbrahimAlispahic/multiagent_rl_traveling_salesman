@@ -42,11 +42,12 @@ def main():
     )
 
     # Load the saved Q networks
-    q_networks = torch.load("q_networks.pth")
+    q_networks = torch.load("q_networks_4a_20t_03_fixed_pos_0.01_step.pth")
 
-    num_episodes = 5000
+    num_episodes = 1
     for episode in range(num_episodes):
         print(f"EPISODE {episode}")
+        state = env.reset()
         done = False
         ep_length = 0
 
@@ -57,7 +58,7 @@ def main():
                 # env.render()
                 # break
 
-            actions = softmax_select_actions(state, q_networks, num_actions, False)
+            actions = softmax_select_actions(state, q_networks, num_actions, use_softmax=True)
             next_state, _rewards, done, _ = env.step(actions)
             state = next_state
             env.render()

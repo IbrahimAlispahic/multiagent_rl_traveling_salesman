@@ -21,15 +21,28 @@ env = MaTsEnvironment(
 )
 
 
-def softmax_select_actions(state, q_networks, temperature=1.0):
-    actions = np.zeros(env._num_agents)
-    for i in range(env._num_agents):
-        state_tensor = torch.tensor(state)
-        q_values = q_networks[f"agent{i}"](state_tensor)
-        probabilities = softmax(q_values / temperature, dim=0).detach().numpy()
-        action = np.random.choice(range(num_actions), p=probabilities)
+def softmax_select_actions(
+    state, q_networks, num_actions, use_softmax=True, temperature=1.0
+):
+    """
+    Select actions based on Q values. If use_softmax is True, use softmax probabilities,
+    otherwise select the action with the highest Q value.
+    """
+    actions = np.zeros(len(q_networks))
+    for i, q_network in enumerate(q_networks.values()):
+        state_tensor = torch.tensor(state, dtype=torch.float32)
+        q_values = q_network(state_tensor)
+
+        if use_softmax:
+            probabilities = softmax(q_values / temperature, dim=0).detach().numpy()
+            action = np.random.choice(range(num_actions), p=probabilities)
+        else:
+            action = torch.argmax(q_values).item()
+
         actions[i] = action
     return actions
+
+
 
 
 # Define a function to select actions based on the policy networks
@@ -49,19 +62,19 @@ def select_actions(state, q_networks):
 # Run the environment for a few episodes and render each episode
 num_episodes = 5_000
 for episode in range(num_episodes):
-    print(f"EPISODE {episode}")
+    # print(f"EPISODE {episode}")
     state = env.reset()
     done = False
     ep_length = 0
 
     while not done:
         ep_length += 1
-        if ep_length > 400:
-            print("OVER 400 episode!")
+        if ep_length > 1000:
+            print("OVER 1000 episode!")
             # print(actions)
-            # break
+            break
             # env.render()
-        actions = softmax_select_actions(state, q_networks)
+        actions = softmax_select_actions(state, q_networks, num_actions, use_softmax=True)
         # actions = select_actions(state, q_networks)
         next_state, rewards, done, _ = env.step(actions)
         # print("REWARDS: ", rewards)

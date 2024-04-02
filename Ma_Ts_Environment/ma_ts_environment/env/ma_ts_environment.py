@@ -37,17 +37,51 @@ class MaTsEnvironment:
         plt.ion()
 
     def reset(self):
-        self.fixed_agent_positions = np.random.uniform(
-            0.1, 0.9, size=(self._num_agents, 2)
-        )  # Avoid spawning near the boundary
-        self.fixed_target_positions = np.random.uniform(
-            0.1, 0.9, size=(self.num_targets, 2)
-        )  # Avoid spawning near the boundary
+        # self.fixed_agent_positions = np.random.uniform(
+        #     0.1, 0.9, size=(self._num_agents, 2)
+        # )  # Avoid spawning near the boundary
+        # self.fixed_target_positions = np.random.uniform(
+        #     0.1, 0.9, size=(self.num_targets, 2)
+        # )  # Avoid spawning near the boundary
 
-        self.agent_positions = self.fixed_agent_positions.copy()
+        self.agent_positions = np.array(
+            [
+                [0.25110137, 0.7047228],
+                [0.20771958, 0.24299219],
+                [0.56199839, 0.82543998],
+                [0.35028291, 0.20107422],
+            ]
+        )
+        
+        self.target_positions = np.array(
+            [[0.73244949, 0.1697895 ],
+            [0.85435193, 0.40578461],
+            [0.42319715, 0.11423993],
+            [0.85031146, 0.77381789],
+            [0.23112534, 0.12350136],
+            [0.68539883, 0.15641038],
+            [0.31985881, 0.34471056],
+            [0.87729492, 0.33514149],
+            [0.15666886, 0.65843877],
+            [0.60979561, 0.21711437],
+            [0.13937614, 0.10855416],
+            [0.17176424, 0.76550275],
+            [0.54409846, 0.45519003],
+            [0.10038503, 0.29103383],
+            [0.66017076, 0.66041297],
+            [0.61200461, 0.88684949],
+            [0.67748049, 0.80950353],
+            [0.15583318, 0.24617358],
+            [0.59733078, 0.28666742],
+            [0.33251132, 0.78637891]])
+
+        # print(self.agent_positions)
+        # print(self.target_positions)
+
+        # self.agent_positions = self.fixed_agent_positions.copy()
         self.previous_agent_positions = self.agent_positions.copy()
         self.velocities = self.agent_positions - self.previous_agent_positions
-        self.target_positions = self.fixed_target_positions.copy()
+        # self.target_positions = self.fixed_target_positions.copy()
         self.visited_targets.fill(False)
         self.target_claims.fill(-1)
         # distances_to_other_agents = self.get_distances_to_other_agents()
@@ -65,7 +99,7 @@ class MaTsEnvironment:
         )
 
     def _calculate_movement(self, action):
-        step_size = 0.1
+        step_size = 0.01
         if action == 0:  # move up
             return np.array([0, step_size])
         elif action == 1:  # move down
